@@ -294,6 +294,15 @@ function addBubble(cls, text, tag) {
   const s = document.createElement("span");
   s.textContent = text;
   d.appendChild(s);
+
+  // 加時間戳（sys bubble 不加）
+  if (cls !== "sys") {
+    const ts = document.createElement("div");
+    ts.style.cssText = "font-size:10px;opacity:.45;margin-top:4px;text-align:" + (cls === "user" ? "right" : "left");
+    ts.textContent = new Date().toLocaleTimeString("zh-TW", { hour: "2-digit", minute: "2-digit" });
+    d.appendChild(ts);
+  }
+
   chat.appendChild(d);
   chat.scrollTop = chat.scrollHeight;
   return d;
