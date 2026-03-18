@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Drive 語音助理</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #ffffff; --bg2: #f5f5f4; --bg3: #e8e8e6;
+    --tx: #1c1c1a; --tx2: #6b6b68; --tx3: #a8a8a4;
+    --border: rgba(0,0,0,0.10);
+    --blue-bg: #e6f1fb; --blue-tx: #0c447c;
+    --green-bg: #e1f5ee; --green-tx: #085041;
+    --amber-bg: #faeeda; --amber-tx: #633806;
+    --red-tx: #a32d2d; --red-bg: #fcebeb;
+    --radius: 12px; --radius-sm: 8px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1c1c1a; --bg2: #2c2c2a; --bg3: #3c3c3a;
+      --tx: #f1efe8; --tx2: #b4b2a9; --tx3: #888780;
+      --border: rgba(255,255,255,0.10);
+      --blue-bg: #042c53; --blue-tx: #b5d4f4;
+      --green-bg: #04342c; --green-tx: #9fe1cb;
+      --amber-bg: #412402; --amber-tx: #fac775;
+      --red-bg: #501313; --red-tx: #f7c1c1;
+    }
+  }
+  body { font-family: -apple-system, 'Helvetica Neue', sans-serif; background: var(--bg); color: var(--tx); min-height: 100dvh; display: flex; flex-direction: column; }
+  header { position: relative; padding: 16px 20px 10px; border-bottom: 0.5px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+  header h1 { font-size: 16px; font-weight: 500; }
+  .token-input { position: absolute; right: 15px; top: 12px; width: 60px; padding: 4px 6px; font-size: 11px; border: 0.5px solid var(--border); border-radius: 4px; background: var(--bg2); color: var(--tx); opacity: 0.3; transition: all 0.2s; outline: none; }
+  .token-input:focus { opacity: 1; width: 140px; border-color: var(--blue-tx); }
+  .status { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--tx2); margin-right: 70px; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: #5dcaa5; flex-shrink: 0; }
+  .dot.rec { background: #e24b4a; animation: pulse 1s infinite; }
+  .dot.off { background: #e24b4a; }
+  @keyframes pulse { 0%,100%{opacity:1}50%{opacity:.4} }
+  .chat { flex: 1; overflow-y: auto; padding: 16px 20px; display: flex; flex-direction: column; gap: 10px; }
+  .bubble { max-width: 82%; padding: 10px 14px; border-radius: 18px; font-size: 15px; line-height: 1.55; word-break: break-word; }
+  .bubble.user { align-self: flex-end; background: var(--blue-bg); color: var(--blue-tx); border-bottom-right-radius: 4px; }
+  .bubble.ai   { align-self: flex-start; background: var(--bg2); color: var(--tx); border: 0.5px solid var(--border); border-bottom-left-radius: 4px; }
+  .bubble.sys  { align-self: center; font-size: 12px; color: var(--tx3); background: none; padding: 2px 0; }
+  .bubble.err  { align-self: flex-start; background: var(--red-bg); color: var(--red-tx); border: 0.5px solid var(--red-tx); border-bottom-left-radius: 4px; font-size: 13px; }
+  .tag { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 99px; margin-bottom: 5px; }
+  .tag.search { background: var(--blue-bg); color: var(--blue-tx); }
+  .tag.read   { background: var(--green-bg); color: var(--green-tx); }
+  .tag.write  { background: var(--amber-bg); color: var(--amber-tx); }
+  .preview-card { align-self: flex-start; max-width: 92%; background: var(--amber-bg); border: 0.5px solid var(--amber-tx); border-radius: var(--radius); padding: 12px 14px; color: var(--amber-tx); font-size: 14px; }
+  .preview-card h4 { font-size: 13px; font-weight: 500; margin-bottom: 8px; }
+  .preview-card pre { background: var(--bg); color: var(--tx); font-size: 12px; font-family: monospace; border-radius: var(--radius-sm); padding: 8px; white-space: pre-wrap; border: 0.5px solid var(--border); margin: 6px 0 10px; max-height: 160px; overflow-y: auto; }
+  .preview-card .row { display: flex; gap: 8px; }
+  .btn-ok { flex:1; padding: 8px; background: #0f6e56; color: #e1f5ee; border: none; border-radius: var(--radius-sm); font-size: 14px; cursor: pointer; font-weight: 500; }
+  .btn-no { flex:1; padding: 8px; background: var(--bg); color: var(--tx2); border: 0.5px solid var(--border); border-radius: var(--radius-sm); font-size: 14px; cursor: pointer; }
+  .dots { display: flex; gap: 5px; padding: 4px 0; }
+  .dots span { width: 6px; height: 6px; border-radius: 50%; background: var(--tx3); animation: blink 1.2s infinite; }
+  .dots span:nth-child(2){ animation-delay:.2s }
+  .dots span:nth-child(3){ animation-delay:.4s }
+  @keyframes blink { 0%,80%,100%{opacity:.2}40%{opacity:1} }
+  footer { padding: 12px 16px 20px; border-top: 0.5px solid var(--border); display: flex; flex-direction: column; align-items: center; gap: 12px; background: var(--bg); }
+  .mic-wrap { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .mic { width: 68px; height: 68px; border-radius: 50%; border: 0.5px solid var(--border); background: var(--bg2); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: transform .12s, background .12s; }
+  .mic:active { transform: scale(.95); }
+  .mic.rec { background: var(--red-bg); border-color: var(--red-tx); }
+  .mic svg { width: 26px; height: 26px; stroke: var(--tx); }
+  .mic.rec svg { stroke: var(--red-tx); }
+  .mic-label { font-size: 12px; color: var(--tx2); }
+  .stt-mode { font-size: 10px; color: var(--tx3); margin-top: 2px; }
+  .text-row { display: flex; gap: 8px; width: 100%; max-width: 480px; }
+  .text-row input { flex:1; padding: 9px 14px; border: 0.5px solid var(--border); border-radius: 99px; background: var(--bg2); color: var(--tx); font-size: 14px; outline: none; }
+  .text-row input:focus { border-color: var(--blue-tx); }
+  .text-row button { padding: 9px 18px; border-radius: 99px; border: 0.5px solid var(--border); background: var(--bg2); color: var(--tx); font-size: 14px; cursor: pointer; white-space: nowrap; }
+  .session-row { font-size: 12px; color: var(--tx3); display: flex; align-items: center; gap: 6px; }
+  .file-chip { padding: 2px 9px; background: var(--bg3); border-radius: 99px; color: var(--tx2); font-size: 11px; border: 0.5px solid var(--border); }
+  .clear-btn { cursor: pointer; color: var(--tx2); width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; border-radius: 50%; background: var(--bg2); font-size: 10px; border: 0.5px solid var(--border); transition: 0.2s; }
+  .clear-btn:hover { background: var(--red-bg); color: var(--red-tx); border-color: var(--red-tx); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Drive 語音助理</h1>
+  <div class="status"><div class="dot" id="dot"></div><span id="stxt">連線中…</span></div>
+  <input type="password" id="apiToken" class="token-input" placeholder="Token"/>
+</header>
+
+<div class="chat" id="chat">
+  <div class="bubble sys" id="ts"></div>
+  <div class="bubble ai">你好！我可以幫你搜尋、閱讀、摘要或修改 Google Drive 的檔案，也可以幫你新增筆記。</div>
+</div>
+
+<footer>
+  <div class="mic-wrap">
+    <button class="mic" id="mic" onclick="toggleRec()">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="9" y="2" width="6" height="11" rx="3"/>
+        <path d="M5 10a7 7 0 0 0 14 0"/>
+        <line x1="12" y1="19" x2="12" y2="22"/>
+        <line x1="8" y1="22" x2="16" y2="22"/>
+      </svg>
+    </button>
+    <span class="mic-label" id="mlabel">點擊說話</span>
+    <span class="stt-mode" id="sttMode"></span>
+  </div>
+  <div class="text-row">
+    <input id="tinput" placeholder="或輸入指令…" onkeydown="if(event.key==='Enter')sendText()"/>
+    <button onclick="sendText()">送出</button>
+  </div>
+  <div class="session-row" id="srow" style="display:none">
+    目前參考：<span class="file-chip" id="fchip"></span>
+    <div class="clear-btn" onclick="clearCtx()" title="清除目標檔案">✖</div>
+  </div>
+</footer>
+
+<script>
+// ── 設定（唯一需要修改的地方）─────────────────────────────────────────────
+const GAS_URL   = "https://script.google.com/macros/s/YOUR_DEPLOY_ID/exec"; // ← 填入你的 GAS exec URL
+const sessionId = "s-" + Math.random().toString(36).slice(2, 9);
+
+// ── 初始化 ─────────────────────────────────────────────────────────────────
+document.getElementById("ts").textContent =
+  new Date().toLocaleTimeString("zh-TW", { hour: "2-digit", minute: "2-digit" });
+
+// Token 本地暫存
+const savedToken = localStorage.getItem("drive_api_token");
+if (savedToken) document.getElementById("apiToken").value = savedToken;
+document.getElementById("apiToken").addEventListener("change", function () {
+  localStorage.setItem("drive_api_token", this.value);
+});
+
+function getToken() { return document.getElementById("apiToken").value; }
+
+// 偵測 STT 模式
+// 優先用 getUserMedia + Gemini（更準），若瀏覽器不支援改用 Web Speech API
+const hasMediaRecorder = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder);
+const hasSpeechRecog   = !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+document.getElementById("sttMode").textContent = hasMediaRecorder ? "Gemini STT" : hasSpeechRecog ? "Web Speech API" : "（無語音支援）";
+
+// 健康檢查
+fetch(GAS_URL, {
+  method: "POST",
+  headers: { "Content-Type": "text/plain" },
+  body: JSON.stringify({ action: "health", token: getToken() }),
+  redirect: "follow",
+})
+  .then(r => r.ok ? setStatus(true, "已連線") : setStatus(false, "後端異常"))
+  .catch(() => setStatus(false, "後端離線"));
+
+function setStatus(ok, msg) {
+  document.getElementById("dot").className = "dot" + (ok ? "" : " off");
+  document.getElementById("stxt").textContent = msg;
+}
+
+// ── API（fetch → GAS doPost）──────────────────────────────────────────────
+// Content-Type 用 text/plain 避免觸發 CORS preflight
+async function api(payload) {
+  const res = await fetch(GAS_URL, {
+    method: "POST",
+    headers: { "Content-Type": "text/plain" },
+    body: JSON.stringify({ ...payload, token: getToken(), session_id: sessionId }),
+    redirect: "follow",
+  });
+  return res.json();
+}
+
+// ── Chat UI ────────────────────────────────────────────────────────────────
+let thinkEl = null;
+
+function addBubble(cls, text, tag) {
+  rmThink();
+  const chat = document.getElementById("chat");
+  const d = document.createElement("div");
+  d.className = "bubble " + cls;
+  if (tag) {
+    const t = document.createElement("span");
+    t.className = "tag " + tag;
+    t.textContent = tag;
+    d.appendChild(t);
+    d.appendChild(document.createElement("br"));
+  }
+  const s = document.createElement("span");
+  s.textContent = text;
+  d.appendChild(s);
+  chat.appendChild(d);
+  chat.scrollTop = chat.scrollHeight;
+  return d;
+}
+
+function addThink() {
+  rmThink();
+  const chat = document.getElementById("chat");
+  thinkEl = document.createElement("div");
+  thinkEl.className = "bubble ai";
+  thinkEl.innerHTML = '<div class="dots"><span></span><span></span><span></span></div>';
+  chat.appendChild(thinkEl);
+  chat.scrollTop = chat.scrollHeight;
+}
+
+function rmThink() { if (thinkEl) { thinkEl.remove(); thinkEl = null; } }
+
+function addPreview(data) {
+  rmThink();
+  const chat = document.getElementById("chat");
+  const d = document.createElement("div");
+  d.className = "preview-card";
+  const token = data.confirm_token;
+  d.innerHTML = `
+    <h4>即將修改：${esc(data.preview.file_name)}</h4>
+    <pre>${esc(data.preview.new_snippet)}</pre>
+    <div class="row">
+      <button class="btn-ok" id="ok-${token}">確認修改</button>
+      <button class="btn-no" id="no-${token}">取消</button>
+    </div>`;
+  chat.appendChild(d);
+  chat.scrollTop = chat.scrollHeight;
+  document.getElementById("ok-" + token).onclick = () => confirmWrite(token, d);
+  document.getElementById("no-" + token).onclick = () => d.remove();
+  speak(data.message || "請確認修改內容");
+}
+
+function esc(s) {
+  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function setFile(name) {
+  if (!name) return;
+  document.getElementById("fchip").textContent = name;
+  document.getElementById("srow").style.display = "flex";
+}
+
+function speak(text) {
+  if (!window.speechSynthesis) return;
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = "zh-TW";
+  speechSynthesis.cancel();
+  speechSynthesis.speak(u);
+}
+
+// ── 指令 ───────────────────────────────────────────────────────────────────
+async function sendCommand(text) {
+  if (!text.trim()) return;
+  addBubble("user", text);
+  addThink();
+  try {
+    const data = await api({ action: "command", text });
+    if (data.error) { addBubble("err", data.error); return; }
+    if (data.type === "write_preview") {
+      addPreview(data);
+    } else {
+      addBubble("ai", data.content, guessTag(text));
+      speak(data.content || "");
+      if (data.file_name) setFile(data.file_name);
+    }
+  } catch (e) {
+    rmThink();
+    console.error(e);
+    addBubble("err", "錯誤：" + (e.message || String(e)));
+  }
+}
+
+async function confirmWrite(token, el) {
+  el.remove();
+  addThink();
+  try {
+    const data = await api({ action: "confirm-write", token });
+    addBubble("ai", data.content || data.detail, "write");
+    speak(data.content || "");
+  } catch (e) {
+    rmThink();
+    addBubble("err", "寫入失敗：" + (e.message || String(e)));
+  }
+}
+
+async function clearCtx() {
+  document.getElementById("srow").style.display = "none";
+  document.getElementById("fchip").textContent = "";
+  try { await api({ action: "clear-context" }); } catch (e) {}
+  addBubble("sys", "已清除目標檔案連結。");
+}
+
+function guessTag(text) {
+  if (/搜尋|找/.test(text)) return "search";
+  if (/修改|新增|更新|刪除|記錄|建立/.test(text)) return "write";
+  return "read";
+}
+
+function sendText() {
+  const inp = document.getElementById("tinput");
+  const t = inp.value.trim();
+  if (!t) return;
+  inp.value = "";
+  sendCommand(t);
+}
+
+// ── 語音：自動選擇模式 ─────────────────────────────────────────────────────
+function setRecUI(active) {
+  document.getElementById("mic").classList.toggle("rec", active);
+  document.getElementById("mlabel").textContent = active ? "錄音中，再按停止" : "點擊說話";
+  document.getElementById("dot").className = "dot" + (active ? " rec" : "");
+  document.getElementById("stxt").textContent = active ? "錄音中…" : "已連線";
+}
+
+// ── 模式 1：getUserMedia + Gemini STT ─────────────────────────────────────
+let recording = false, mr = null, chunks = [];
+
+async function recStart_media() {
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  chunks = [];
+  mr = new MediaRecorder(stream);
+  mr.ondataavailable = e => chunks.push(e.data);
+  mr.onstop = async () => {
+    stream.getTracks().forEach(t => t.stop());
+    const blob = new Blob(chunks, { type: "audio/webm" });
+    const b64  = await new Promise((res, rej) => {
+      const r = new FileReader();
+      r.onload = () => res(r.result.split(",")[1]);
+      r.onerror = rej;
+      r.readAsDataURL(blob);
+    });
+    addBubble("user", "🎙 辨識中…");
+    addThink();
+    try {
+      const data = await api({ action: "stt", audio_b64: b64, mime: "audio/webm" });
+      rmThink();
+      if (data.text) { sendCommand(data.text); }
+      else { addBubble("ai", "語音辨識失敗，請重試。"); }
+    } catch (e) {
+      rmThink();
+      addBubble("err", "STT 失敗：" + (e.message || String(e)));
+    }
+  };
+  mr.start();
+  recording = true;
+  setRecUI(true);
+}
+
+function recStop_media() {
+  mr.stop();
+  recording = false;
+  setRecUI(false);
+}
+
+// ── 模式 2：Web Speech API（備援）────────────────────────────────────────
+let recog = null;
+
+function recStart_speech() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  recog = new SR();
+  recog.lang = "zh-TW";
+  recog.continuous = false;
+  recog.interimResults = false;
+  recog.onresult = e => {
+    const text = e.results[0][0].transcript;
+    recog = null;
+    setRecUI(false);
+    sendCommand(text);
+  };
+  recog.onerror = e => {
+    recog = null;
+    setRecUI(false);
+    addBubble("err", "語音錯誤：" + e.error);
+  };
+  recog.onend = () => {
+    if (recog) { recog = null; setRecUI(false); }
+  };
+  recog.start();
+  setRecUI(true);
+}
+
+function recStop_speech() {
+  if (recog) { recog.stop(); recog = null; }
+  setRecUI(false);
+}
+
+// ── 統一入口 ───────────────────────────────────────────────────────────────
+async function toggleRec() {
+  if (hasMediaRecorder) {
+    // 模式 1
+    if (!recording) {
+      try { await recStart_media(); }
+      catch (e) {
+        // getUserMedia 失敗（例如 iOS Safari）→ 自動 fallback
+        if (hasSpeechRecog) {
+          document.getElementById("sttMode").textContent = "Web Speech API (fallback)";
+          recStart_speech();
+        } else {
+          addBubble("sys", "無法存取麥克風：" + e.message);
+        }
+      }
+    } else {
+      recStop_media();
+    }
+  } else if (hasSpeechRecog) {
+    // 模式 2
+    if (!recog) { recStart_speech(); }
+    else { recStop_speech(); }
+  } else {
+    addBubble("sys", "此裝置不支援語音輸入，請使用文字");
+  }
+}
+</script>
+</body>
+</html>
